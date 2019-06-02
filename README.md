@@ -11,3 +11,8 @@ When registered as the handler for magnet: links, this script sends the file to 
 * Put the .reg file somewhere
 * Modify the __HKEY_CLASSES_ROOT\\Magnet\\shell\\open\\command__ value with the path to your .ps1 file. Remember to escape your "\\"s.
 * Merge the .reg
+
+## Usage ##
+* Click on a magnet link to start the download on the targeted server
+* No further action is needed if everything is OK
+* An error popup is shown if there is an error either during the communication with the server or in the creation of the download.

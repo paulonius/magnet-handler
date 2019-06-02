@@ -1,24 +1,49 @@
-# The directory to receive .torrent files (include trailing \)
-$watch = "C:\Users\user\Dropbox\torrent\"
+$Root = 'http://localhost:9091/transmission'
+$User = 'transmission'
+$Pass = 'secretPassword'
+$Rpc = $Root + '/rpc'
+$SecPass = ConvertTo-SecureString $Pass -AsPlainText -Force
+$Credential = New-Object System.Management.Automation.PSCredential($User, $SecPass)
+$SessionId = ''
 
-$m = $args[0]
-$torrent = "d10:magnet-uri" + $m.length + ":" + $m +"e"
-if ($m -match "xt=urn:btih:([^&/]+)") 
-{
-	$file = $watch + "meta-" + $matches[1] + ".torrent"
-	$wshell = New-Object -ComObject Wscript.Shell
-	Out-File -FilePath $file -InputObject $torrent -Encoding ASCII
-	if ( -Not $Error ) {
-		$wshell.Popup("Torrent file " + $file + " created.",0,"Torrent Added",0x0)
-		exit 0
-	}
-	else
-	{
-		$null = $wshell.Popup($Error[0],0,"Torrent Failed",0x10)
-		exit 2
-	}
+$Wshell = New-Object -ComObject Wscript.Shell
+
+try {
+	Invoke-WebRequest $Rpc -UseBasicParsing -Credential $Credential -TimeoutSec 2
+} catch [System.Net.WebException] {
+	Write-Verbose "An exception was caught: $($_.Exception.Message)"
+    $ExceptionResponse = $_.Exception.Response
+	$StatusCode = [int]$ExceptionResponse.StatusCode
+    switch ($StatusCode) {
+        409 { # Normal execution
+            $SessionId = $ExceptionResponse.Headers.Item('X-Transmission-Session-Id')
+        }
+        default { # Somethings amiss
+            $Wshell.Popup("Could not connect to Transmission on $Root", 0x10)
+            Exit 1
+        }
+    }
 }
-else
-{
-	exit 1
+
+try {
+    $Body = @{
+        method = 'torrent-add'
+        arguments = @{
+            filename = $args[0]
+        }
+    }
+    $Headers = @{
+        'X-Transmission-Session-Id' = $SessionId
+    }
+    $Json = $Body | ConvertTo-Json
+    $Response = Invoke-RestMethod -Uri $Rpc -Method 'Post' -Credential $Credential -Headers $Headers -Body $Json
+    if ($Response.result -eq 'success') {
+        Exit 0
+    } else {
+        $Wshell.Popup("Error adding magnet link: $($Response.result)", 0x10)
+        Exit 3
+    }
+} catch [System.Net.WebException] {
+    $Wshell.Popup("Error adding magnet link $_.Exception.Message", 0x10)
+    Exit 2
 }
